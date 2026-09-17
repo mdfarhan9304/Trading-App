@@ -1,0 +1,250 @@
+import React, { useCallback, useState } from 'react';
+import { Pressable, ScrollView, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { CONFIG } from '../config';
+import { activeCandle, lastPrice } from '../domain/candles';
+import { spread } from '../domain/orderBook';
+import { INTERVALS, type Interval, type Tier } from '../protocol/types';
+import { marketController } from '../state/MarketController';
+import { selectIsLive, useConnectionStore, useMarketStore, useTierStore } from '../state/stores';
+import { CandleChart } from './CandleChart';
+import { DebugSheet } from './DebugSheet';
+import { OrderBookPanel } from './OrderBookPanel';
+import { PriceHeader } from './PriceHeader';
+import { ConnectionBadge, IntervalSelector, LatencyBadge, TierBadge } from './StatusBar';
+import { theme } from './theme';
+import { TradesList } from './TradesList';
+
+/**
+ * The single trading screen.
+ *
+ * EVERY SUBSCRIPTION HERE IS A NARROW SELECTOR
+ * --------------------------------------------
+ * This is the most important detail in the file. At `full` tier the store receives ~10 candle
+ * updates, 5 depth updates and 25 trades per second. Selecting whole store objects would
+ * re-render the entire screen on every one of those.
+ *
+ * Instead each value is selected individually, so a trade arriving re-renders only the trades
+ * list, a depth delta only the order book, and a candle only the chart. The store methods
+ * cooperate by returning new references for the slice they touched and leaving the rest
+ * untouched by reference.
+ */
+export const TradingScreen: React.FC = () => {
+  const [debugVisible, setDebugVisible] = useState(false);
+
+  // --- market data: one selector per consumer -------------------------------
+  const symbol = useMarketStore((s) => s.symbol);
+  const symbolInfo = useMarketStore((s) => s.symbolInfo);
+  const interval = useMarketStore((s) => s.interval);
+  const candles = useMarketStore((s) => s.candles);
+  const book = useMarketStore((s) => s.book);
+  const trades = useMarketStore((s) => s.trades);
+  const sessionOpen = useMarketStore((s) => s.sessionOpen);
+
+  // --- connection ----------------------------------------------------------
+  const status = useConnectionStore((s) => s.status);
+  const detail = useConnectionStore((s) => s.detail);
+  const lastFrameAt = useConnectionStore((s) => s.lastFrameAt);
+  const reconnectAttempts = useConnectionStore((s) => s.reconnectAttempts);
+  const malformedFrames = useConnectionStore((s) => s.malformedFrames);
+  const serverErrors = useConnectionStore((s) => s.serverErrors);
+  const connId = useConnectionStore((s) => s.connId);
+  const isLive = useConnectionStore(selectIsLive);
+
+  // --- tier ----------------------------------------------------------------
+  const serverTier = useTierStore((s) => s.server);
+  const measuredHz = useTierStore((s) => s.measuredHz);
+  const chartUpdatesSent = useTierStore((s) => s.chartUpdatesSent);
+  const latency = useTierStore((s) => s.latency);
+  const injectedDelayMs = useTierStore((s) => s.injectedDelayMs);
+
+  const price = lastPrice(candles);
+  const current = activeCandle(candles);
+  const spreadTicks = spread(book);
+
+  /**
+   * Everything cached is shown as stale whenever we are not live.
+   *
+   * A single predicate drives dimming across the chart, book and trades, so the three can never
+   * disagree about whether what they show is current - which is exactly the failure the
+   * assignment warns against ("Show cached values as stale while disconnected rather than
+   * presenting them as live").
+   */
+  const stale = !isLive;
+
+  const handleInterval = useCallback((next: Interval) => {
+    marketController.setInterval(next);
+  }, []);
+
+  const handleSetTier = useCallback((tier: Tier | 'auto') => {
+    marketController.setTier(tier);
+  }, []);
+
+  const handleInjectDelay = useCallback((ms: number) => {
+    marketController.injectDelay(ms);
+  }, []);
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      {/*
+        RN 0.87 removed StatusBar's `backgroundColor` prop. The bar's background now comes from
+        the Android theme, and SafeAreaView already paints the inset area beneath it.
+      */}
+      <RNStatusBar barStyle="light-content" />
+
+      <View style={styles.topBar}>
+        <ConnectionBadge
+          status={status}
+          detail={detail}
+          lastFrameAt={lastFrameAt}
+          reconnectAttempts={reconnectAttempts}
+        />
+        <TierBadge tier={serverTier} measuredHz={measuredHz} onPress={() => setDebugVisible(true)} />
+      </View>
+
+      <PriceHeader
+        symbol={symbol}
+        lastPrice={price}
+        referencePrice={sessionOpen}
+        symbolInfo={symbolInfo}
+        spreadTicks={spreadTicks}
+        stale={stale}
+      />
+
+      <View style={styles.controlRow}>
+        <IntervalSelector intervals={INTERVALS} active={interval} onSelect={handleInterval} />
+        <Pressable onPress={() => setDebugVisible(true)} hitSlop={8} style={styles.debugButton}>
+          <Text style={styles.debugButtonText}>DEBUG</Text>
+        </Pressable>
+      </View>
+
+      {/*
+        The screen scrolls because on a short device the chart, 20 book rows and the trade list
+        do not all fit. The trades FlatList has scrollEnabled={false} so it cannot fight this
+        ScrollView for the gesture - nested scrollables in the same direction are a classic
+        source of unresponsive lists.
+      */}
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.chartCard}>
+          <CandleChart
+            window={candles}
+            interval={interval}
+            symbolInfo={symbolInfo}
+            stale={stale}
+          />
+        </View>
+
+        <View style={styles.metaRow}>
+          <LatencyBadge
+            latencyMs={latency?.latencyMs ?? null}
+            jitterMs={latency?.jitterMs ?? null}
+            score={serverTier?.score ?? null}
+          />
+          <Text style={styles.candleMeta}>
+            {current ? `${candles.candles.length} candles` : 'no candles'}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <OrderBookPanel
+            book={book}
+            symbolInfo={symbolInfo}
+            rows={CONFIG.BOOK_ROWS}
+            stale={stale}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <TradesList trades={trades} symbolInfo={symbolInfo} stale={stale} />
+        </View>
+      </ScrollView>
+
+      <DebugSheet
+        visible={debugVisible}
+        onClose={() => setDebugVisible(false)}
+        tier={serverTier}
+        chartUpdatesSent={chartUpdatesSent}
+        measuredHz={measuredHz}
+        latency={latency}
+        injectedDelayMs={injectedDelayMs}
+        book={book}
+        candles={candles}
+        connId={connId}
+        malformedFrames={malformedFrames}
+        serverErrors={serverErrors}
+        onSetTier={handleSetTier}
+        onInjectDelay={handleInjectDelay}
+        onForceResync={() => marketController.forceResync()}
+        onForceDisconnect={() => marketController.forceDisconnect()}
+      />
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: theme.color.bg,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: theme.space(4),
+    paddingTop: theme.space(2),
+  },
+  controlRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.space(4),
+    paddingBottom: theme.space(2),
+  },
+  debugButton: {
+    paddingHorizontal: theme.space(2.5),
+    paddingVertical: theme.space(1),
+    borderRadius: theme.radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.color.border,
+  },
+  debugButtonText: {
+    color: theme.color.textDim,
+    fontSize: theme.font.size.xs,
+    letterSpacing: 1,
+  },
+  body: {
+    flex: 1,
+  },
+  bodyContent: {
+    paddingBottom: theme.space(6),
+  },
+  chartCard: {
+    height: 280,
+    marginHorizontal: theme.space(2),
+    backgroundColor: theme.color.surface,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.space(4),
+    paddingVertical: theme.space(2),
+  },
+  candleMeta: {
+    color: theme.color.textFaint,
+    fontFamily: theme.font.mono,
+    fontSize: theme.font.size.xs,
+  },
+  card: {
+    marginHorizontal: theme.space(2),
+    marginBottom: theme.space(2),
+    backgroundColor: theme.color.surface,
+    borderRadius: theme.radius.md,
+  },
+});

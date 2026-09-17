@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Permits plain HTTP to the local development backend only.
+
+  WHY THIS FILE EXISTS
+  Android blocks cleartext HTTP by default from API 28 (Android 9) onward, and it fails in
+  the worst possible way: the request is rejected locally with a generic network error that
+  looks exactly like the server being down. Many hours get lost to this.
+
+  The React Native template sets android:usesCleartextTraffic from a Gradle placeholder,
+  which is true for debug builds and FALSE for release. Since the assignment deliverable is
+  an APK pointed at a laptop running the backend over HTTP, a release build would be unable
+  to connect at all without this.
+
+  Scoping rather than blanket-allowing: listing individual dev hosts keeps TLS enforced for
+  every other destination, so this is not a general security downgrade. Android ignores
+  android:usesCleartextTraffic when this file is present, so it governs both build types.
+
+    10.0.2.2   the Android emulator's alias for the host machine
+    localhost  a device using `adb reverse tcp:8080 tcp:8080`
+    10.0.3.2   the Genymotion equivalent of 10.0.2.2
+
+  A physical phone on Wi-Fi reaches the laptop by LAN IP, which cannot be hard-coded here.
+  Use `adb reverse tcp:8080 tcp:8080` so the device can use localhost, which is covered
+  above. That is documented in the README.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">10.0.3.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
