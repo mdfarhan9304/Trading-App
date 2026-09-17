@@ -90,10 +90,16 @@ export const TierBadge: React.FC<{
   return (
     <Pressable onPress={onPress} style={styles.tierBadge} hitSlop={8}>
       <Text style={[styles.tierName, { color }]}>{tier ? tier.tier.toUpperCase() : 'TIER --'}</Text>
+      {/*
+        Target next to measured. `measuredHz` is a 2-second rolling average, so immediately
+        after a tier change it can briefly read above or below the new target while the window
+        still holds frames delivered at the old rate. Labelling it as an average avoids that
+        looking like a discrepancy.
+      */}
       <Text style={styles.tierRate}>
         {tier ? `${tier.hz}/s target` : '--'}
         {'  '}
-        <Text style={styles.tierMeasured}>{measuredHz.toFixed(1)}/s actual</Text>
+        <Text style={styles.tierMeasured}>{measuredHz.toFixed(1)}/s avg</Text>
       </Text>
       {tier?.override ? <Text style={styles.forced}>FORCED</Text> : null}
     </Pressable>

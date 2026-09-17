@@ -244,9 +244,13 @@ const styles = StyleSheet.create({
   bidPrice: {
     color: theme.color.up,
     textAlign: 'right',
+    // Gutter down the middle of the book. Without it the right-aligned bid price and the
+    // left-aligned ask price meet in the centre and read as one number.
+    paddingRight: theme.space(2),
   },
   askPrice: {
     color: theme.color.down,
+    paddingLeft: theme.space(2),
   },
   empty: {
     height: 18 * 10,
