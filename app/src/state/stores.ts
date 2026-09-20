@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { CONFIG } from '../config';
 import {
+  DEFAULT_WATCHLIST,
+  reorderWatchlist,
+  upsertWatchlistCoin,
+  type WatchlistCoin,
+} from '../domain/watchlist';
+import {
   createCandleWindow,
   setHistory as setHistoryPure,
   upsertCandle as upsertCandlePure,
@@ -209,5 +215,39 @@ export const useTierStore = create<TierStoreState>((set, get) => ({
   reset: () => {
     chartFrameTimes = [];
     set({ server: null, chartUpdatesSent: 0, latency: null, measuredHz: 0, pendingOverride: null });
+  },
+}));
+
+export type AppRoute = { name: 'watchlist' } | { name: 'detail'; symbol: string };
+
+interface SessionState {
+  route: AppRoute;
+  coins: WatchlistCoin[];
+
+  openDetail(symbol: string): void;
+  goWatchlist(): void;
+  reorder(from: number, to: number): void;
+}
+
+export const useSessionStore = create<SessionState>((set, get) => ({
+  route: { name: 'watchlist' },
+  coins: DEFAULT_WATCHLIST,
+
+  openDetail: (symbol) => {
+    const coins = upsertWatchlistCoin(get().coins, symbol);
+    const route = get().route;
+    if (route.name === 'detail' && route.symbol === symbol && coins === get().coins) return;
+    set({ coins, route: { name: 'detail', symbol } });
+  },
+
+  goWatchlist: () => {
+    if (get().route.name === 'watchlist') return;
+    set({ route: { name: 'watchlist' } });
+  },
+
+  reorder: (from, to) => {
+    const coins = reorderWatchlist(get().coins, from, to);
+    if (coins === get().coins) return;
+    set({ coins });
   },
 }));

@@ -52,7 +52,7 @@ SEED=1337 npm run backend    # a different but equally deterministic market
 ### Verification commands
 
 ```bash
-npm test                      # 129 tests (47 backend, 82 app)
+npm test                      # 146 tests (47 backend, 99 app)
 cd server && npm run replay   # determinism + candles recomputed independently
 cd server && npm run probe    # live protocol against a running backend
 ```
@@ -73,7 +73,10 @@ app/src/
   net/        I/O only. Socket, REST, latency sampling. No app state.
   domain/     PURE functions. Order book reducer, candle window. No React, no I/O.
   state/      Zustand stores + the one controller that knows about both net and state.
-  ui/         Components. Never touch a socket.
+  ui/         Presentation only. Never touch a socket.
+    screens/    One file per screen. Reads stores; never opens a connection.
+    components/ Reusable widgets used by screens.
+    theme.ts    Colors, spacing, type.
 ```
 
 The directory split **is** the architecture, and the dependency arrows only point one way.
@@ -104,12 +107,13 @@ The state library's only job is stopping those from re-rendering components that
 - **Redux** would work, but its boilerplate buys nothing here — the reducers already live in
   `domain/` as pure functions, and the immutable-update ceremony is duplicated effort.
 - **Zustand** gives per-selector subscriptions. Every subscription in
-  [TradingScreen.tsx](app/src/ui/TradingScreen.tsx) is narrow, so a trade re-renders only the
+  [TradingScreen.tsx](app/src/ui/screens/TradingScreen.tsx) is narrow, so a trade re-renders only the
   trades list and a depth delta only the order book. The store methods cooperate by returning new
   references *only* for the slice they touched.
 
-Three stores, split by update frequency and by who reads them. Not ten — narrow selectors already
-prevent the re-renders that over-atomizing would chase.
+Four stores, split by update frequency and by who reads them. Not ten — narrow selectors already
+prevent the re-renders that over-atomizing would chase. Market, connection, and tier update
+with the feed. The session store (watchlist order + which screen is open) does not.
 
 ---
 
@@ -402,11 +406,21 @@ curl -X POST localhost:8080/api/v1/debug/delay -H 'Content-Type: application/jso
 curl localhost:8080/api/v1/debug/sessions      # per-connection tier state
 ```
 
-Deep link:
+## Watchlist and deep links
+
+The app opens on a watchlist. Tap a row to open that coin's detail screen. Drag the **≡**
+handle to change the order. Only **BTC-USDT** has a live feed — it is the one simulated market.
+Other listed pairs stay on the list so there is something to reorder, and so a link to them
+still opens a detail screen instead of being ignored.
+
+A link opens the detail screen on both a cold start and when the app is already running:
 
 ```bash
 adb shell am start -a android.intent.action.VIEW -d "twospoon://symbol/BTC-USDT"
 ```
+
+`BTC-USDT` opens the live trading screen. Another valid pair such as `ETH-USDT` opens that
+coin's detail and adds it to the watchlist if it was missing. A malformed link is ignored.
 
 ---
 
@@ -454,7 +468,7 @@ price tick re-animates every candle on screen. It also has no viewport concept
 
 ## Tests
 
-129 tests. `npm test` runs both suites.
+146 tests. `npm test` runs both suites.
 
 | Suite | Covers |
 |---|---|
@@ -463,6 +477,7 @@ price tick re-animates every candle on screen. It also has no viewport concept
 | [app/\_\_tests\_\_/orderBook.test.ts](app/__tests__/orderBook.test.ts) | 33 tests: the in-flight race, bracket vs chain checks, gaps, duplicates, crossed book, buffer overflow, recovery cycles |
 | [app/\_\_tests\_\_/latency.test.ts](app/__tests__/latency.test.ts) | Median vs mean under an outlier, jitter vs standard deviation, sequence matching, outlier rejection |
 | [app/\_\_tests\_\_/candles.test.ts](app/__tests__/candles.test.ts) | Upsert vs append, duplicates, empty history, interval race, flat-window scale, frame validation, deep links |
+| [app/\_\_tests\_\_/watchlist.test.ts](app/__tests__/watchlist.test.ts) | Reorder, catalog lookup, drag target, deep-link route |
 
 The tier machine never calls `Date.now()` — every method takes the time as an argument — which is
 why 37 hysteresis tests run in under a second with no fake timers and no sleeping.
@@ -490,8 +505,10 @@ which no test would have caught.
 ## Known limitations
 
 - **In memory only.** Restarting the backend loses all history and resets the market.
-- **Single symbol**, hard-coded. Multi-symbol would mean a `Map<string, MarketEngine>` and a symbol
-  field on subscriptions; it touches routes, protocol and session.
+- **Single live symbol**, hard-coded. The watchlist can hold other pairs and a deep link can
+  open them, but only BTC-USDT has a feed. Multi-symbol live data would mean a
+  `Map<string, MarketEngine>` and a symbol field on subscriptions; it touches routes, protocol
+  and session.
 - **No auth or TLS on the debug endpoints** — deliberate, so a reviewer can drive them with curl.
   Would be gated or compiled out in production.
 - **1s candles are unrealistic** for a real exchange. Chosen so live formation and tier differences

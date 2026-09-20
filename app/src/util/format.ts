@@ -1,4 +1,4 @@
-import type { PriceTicks, QtyLots, SymbolInfo } from '../protocol/types';
+import type { Interval, PriceTicks, QtyLots, SymbolInfo } from '../protocol/types';
 
 // ticks/lots stay ints until here
 export const DEFAULT_SYMBOL_INFO: SymbolInfo = {
@@ -58,12 +58,13 @@ export function formatTimeMs(ts: number): string {
   return `${formatTime(ts)}.${String(date.getMilliseconds()).padStart(3, '0')}`;
 }
 
-export function formatAxisTime(ts: number, showSeconds: boolean): string {
+export function formatAxisTime(ts: number, interval: Interval): string {
   const date = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return showSeconds
-    ? `${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-    : `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  // 1s/5s must show seconds — MM:SS looks like a clock and reads as minutes
+  if (interval === '1m') return clock;
+  return `${clock}:${pad(date.getSeconds())}`;
 }
 
 export function formatAge(ms: number): string {

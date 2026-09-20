@@ -6,7 +6,8 @@ import {
   setHistory,
   upsertCandle,
 } from '../src/domain/candles';
-import { parseSymbolFromUrl } from '../src/util/deeplink';
+import { parseSymbolFromUrl, routeFromDeepLink } from '../src/util/deeplink';
+import { formatAxisTime } from '../src/util/format';
 import { parseServerFrame } from '../src/protocol/types';
 import type { Candle, Interval } from '../src/protocol/types';
 
@@ -239,9 +240,17 @@ describe('deep link parsing', () => {
     expect(parseSymbolFromUrl('twospoon://symbol/btc-usdt')).toBe('BTC-USDT');
   });
 
-  it('strips a query string and fragment', () => {
+  it('strips a query string, fragment, and trailing slash', () => {
     expect(parseSymbolFromUrl('twospoon://symbol/BTC-USDT?ref=push')).toBe('BTC-USDT');
     expect(parseSymbolFromUrl('twospoon://symbol/BTC-USDT#chart')).toBe('BTC-USDT');
+    expect(parseSymbolFromUrl('twospoon://symbol/BTC-USDT/')).toBe('BTC-USDT');
+  });
+
+  it('maps a valid link to the detail route', () => {
+    expect(routeFromDeepLink('twospoon://symbol/eth-usdt')).toEqual({
+      name: 'detail',
+      symbol: 'ETH-USDT',
+    });
   });
 
   it('returns null for anything unrecognised instead of throwing', () => {
@@ -262,5 +271,18 @@ describe('deep link parsing', () => {
   it('survives a malformed percent escape', () => {
     // decodeURIComponent throws on these; a link delivered at cold start must not crash startup.
     expect(parseSymbolFromUrl('twospoon://symbol/%E0%A4%A')).toBeNull();
+  });
+});
+
+describe('chart time labels', () => {
+  const ts = new Date(2026, 8, 20, 14, 32, 5).getTime();
+
+  it('shows hours, minutes, and seconds on a 1s or 5s chart', () => {
+    expect(formatAxisTime(ts, '1s')).toBe('14:32:05');
+    expect(formatAxisTime(ts, '5s')).toBe('14:32:05');
+  });
+
+  it('shows hours and minutes only on a 1m chart', () => {
+    expect(formatAxisTime(ts, '1m')).toBe('14:32');
   });
 });

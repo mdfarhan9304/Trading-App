@@ -29,7 +29,8 @@
           The activity uses launchMode="singleTask", so a link arriving while the app is
           already running is delivered to the existing instance via onNewIntent rather than
           starting a second copy. That is why the app must handle both a cold start (read the
-          initial URL) and a warm start (subscribe to url events) - see src/App.tsx.
+          initial URL) and a warm start (subscribe to url events) - see App.tsx. A valid
+          link opens the symbol detail screen (the live trading view for BTC-USDT).
 
           Test with:
             adb shell am start -a android.intent.action.VIEW -d "twospoon://symbol/BTC-USDT"

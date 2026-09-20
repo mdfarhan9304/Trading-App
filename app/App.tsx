@@ -1,13 +1,19 @@
 import React, { useEffect } from 'react';
-import { Linking, StyleSheet } from 'react-native';
+import { BackHandler, Linking, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { isLiveSymbol } from './src/domain/watchlist';
 import { marketController } from './src/state/MarketController';
-import { TradingScreen } from './src/ui/TradingScreen';
+import { useSessionStore } from './src/state/stores';
+import { CatalogDetailScreen } from './src/ui/screens/CatalogDetailScreen';
+import { TradingScreen } from './src/ui/screens/TradingScreen';
+import { WatchlistScreen } from './src/ui/screens/WatchlistScreen';
 import { theme } from './src/ui/theme';
-import { parseSymbolFromUrl } from './src/util/deeplink';
+import { routeFromDeepLink } from './src/util/deeplink';
 
 export default function App(): React.JSX.Element {
+  const route = useSessionStore((s) => s.route);
+
   useEffect(() => {
     marketController.start();
     return () => marketController.stop();
@@ -16,10 +22,9 @@ export default function App(): React.JSX.Element {
   // cold start = getInitialURL, warm start = 'url' event. need both.
   useEffect(() => {
     const handleUrl = (url: string | null | undefined): void => {
-      if (!url) return;
-      const symbol = parseSymbolFromUrl(url);
-      if (!symbol) return;
-      console.log(`[deeplink] resolved symbol: ${symbol}`);
+      const next = routeFromDeepLink(url);
+      if (!next) return;
+      useSessionStore.getState().openDetail(next.symbol);
     };
 
     void Linking.getInitialURL().then(handleUrl);
@@ -27,10 +32,30 @@ export default function App(): React.JSX.Element {
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (useSessionStore.getState().route.name === 'detail') {
+        useSessionStore.getState().goWatchlist();
+        return true;
+      }
+      // Returning false no longer finishes the activity on current Android / RN,
+      // because registering this listener claims the system back callback.
+      BackHandler.exitApp();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <TradingScreen />
+        {route.name === 'watchlist' ? (
+          <WatchlistScreen />
+        ) : isLiveSymbol(route.symbol) ? (
+          <TradingScreen onBack={() => useSessionStore.getState().goWatchlist()} />
+        ) : (
+          <CatalogDetailScreen symbol={route.symbol} />
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
