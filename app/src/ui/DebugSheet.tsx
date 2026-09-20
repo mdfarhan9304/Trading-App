@@ -7,27 +7,6 @@ import type { Tier, TierState } from '../protocol/types';
 import { theme, } from './theme';
 import { tierColor } from './StatusBar';
 
-/**
- * Debug controls.
- *
- * The assignment requires "a documented debug control that can force a connection into any
- * tier so all three states can be demonstrated without relying on poor Wi-Fi", and that the
- * automatic behaviour still work when the override is off. Both are here, and they are
- * deliberately different mechanisms:
- *
- *   FORCE TIER    overrides the decision outright. Instant, and proves the three delivery
- *                 states exist. The server keeps running its automatic machine underneath, so
- *                 selecting AUTO resumes from current conditions rather than a stale decision.
- *
- *   INJECT DELAY  makes the server delay its pong replies, so the app's MEASURED round-trip
- *                 time genuinely rises. The tier then changes through the real measurement
- *                 path, hysteresis and all. This is the only practical way to film automatic
- *                 behaviour on a good network, and it is the more convincing demonstration.
- *
- * Also here: force a book resync and force a disconnect, so order-book recovery and the
- * stale-then-reconnect cycle can be shown on demand instead of waited for.
- */
-
 interface Props {
   visible: boolean;
   onClose(): void;

@@ -1,21 +1,4 @@
-/**
- * Engine verification harness.  Run with:  npm run replay
- *
- * This exists to prove three properties before any networking code is written, so that
- * when the app later misbehaves we already know the feed itself is sound:
- *
- *   1. DETERMINISM      - the same seed produces a byte-identical market.
- *   2. SEED SENSITIVITY  - a different seed produces a different market (i.e. the seed
- *                          is actually wired through, rather than something being
- *                          accidentally hard-coded).
- *   3. CANDLE CORRECTNESS - candles computed by the engine match candles recomputed
- *                          independently from the raw trade stream.
- *
- * Property 3 is the important one. The engine folds trades into candles incrementally
- * as they arrive; here we capture every emitted trade, aggregate it from scratch with a
- * completely separate implementation, and require the two to agree exactly. That is a
- * real check on the aggregation logic rather than a restatement of it.
- */
+// npm run replay — same seed = same market, candles match a rebuild from trades
 import { MarketEngine } from '../engine/marketEngine';
 import { SYMBOL_INFO } from '../config';
 import { candleOpenTime, INTERVAL_MS, type Candle, type Interval, type Trade } from '../engine/types';

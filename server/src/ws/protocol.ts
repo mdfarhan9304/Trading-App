@@ -1,22 +1,7 @@
 import { isInterval, type Candle, type DepthDelta, type Interval, type SymbolInfo, type Trade } from '../engine/types';
 import { isTier, type Tier, type TierState } from '../tier/tierMachine';
 
-/**
- * The WebSocket wire protocol. Also see docs/PROTOCOL.md.
- *
- * WHY HAND-WRITTEN VALIDATORS
- * ---------------------------
- * A schema library (zod, valibot) would be less code here, but every inbound message
- * arrives from a network peer we do not control, and the assignment explicitly requires
- * handling malformed messages. Hand-written guards make the exact accepted shape
- * readable in one place, add no dependency to the server, and — because they are plain
- * predicates — cost nothing on the hot path.
- *
- * Every guard is total: it takes `unknown` and never throws, so a hostile or buggy
- * client cannot crash the server with an unexpected type. The caller replies with an
- * `error` frame and keeps the connection open, because dropping a connection over one
- * bad frame would turn a client-side bug into a reconnect storm.
- */
+// hand-written guards — a bad frame replies with error, doesn't drop the socket
 
 // ---------------------------------------------------------------------------
 // Client -> Server
@@ -53,15 +38,6 @@ export interface SetTierMessage {
   tier: Tier | 'auto';
 }
 
-/**
- * Debug control: delay every pong reply by `ms`.
- *
- * This is the more interesting of the two debug controls. Forcing a tier proves the
- * three delivery states exist; injecting delay raises the client's genuinely measured
- * RTT, which drives the automatic state machine through a real transition. That lets
- * the automatic behaviour be demonstrated on a good office network, which is otherwise
- * very hard to film.
- */
 export interface InjectDelayMessage {
   type: 'injectDelay';
   ms: number;

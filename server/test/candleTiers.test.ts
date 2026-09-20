@@ -4,26 +4,6 @@ import { ClientSession, type SocketLike } from '../src/ws/clientSession';
 import { TIER_INTERVAL_MS, type Tier } from '../src/tier/tierMachine';
 import type { ServerMessage } from '../src/ws/protocol';
 
-/**
- * The assignment's central correctness requirement:
- *
- *   "The backend must continue processing the complete generated trade stream and
- *    computing correct OHLCV candles at every tier. A slower tier changes how frequently
- *    chart updates are DELIVERED, not the candle's final open, high, low, close, or
- *    volume."
- *
- * This suite proves it end-to-end rather than by inspection. One engine feeds three
- * sessions pinned to the three different tiers, delivery runs through the real
- * ClientSession code including its coalescing buffers and timers, and we then compare
- * what each client actually received.
- *
- * Two assertions matter equally, and the test would be worthless without both:
- *   1. The three tiers really did receive different NUMBERS of chart updates. Without
- *      this, a broken throttle that sent everything to everyone would pass.
- *   2. Every closed candle is byte-identical across all three, and identical to the
- *      engine's own record.
- */
-
 const START = 1_700_000_000_000;
 const STEP_MS = 50;
 const DURATION_MS = 30_000;

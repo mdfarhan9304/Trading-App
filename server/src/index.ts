@@ -6,15 +6,6 @@ import { PORT, SEED, SYMBOL, TRADES_PER_SEC } from './config';
 import { MarketEngine } from './engine/marketEngine';
 import { WsHub } from './ws/wsServer';
 
-/**
- * Server entry point.  Start with:  npm run backend   (from the repository root)
- *
- * REST and WebSocket deliberately share one HTTP server and therefore one port. The app
- * then needs a single base URL, and an Android emulator needs only one host mapping,
- * which removes a whole category of "works on my machine" configuration problems.
- */
-
-/** The LAN address a physical phone should use, for the startup banner. */
 function lanAddress(): string | undefined {
   for (const addresses of Object.values(networkInterfaces())) {
     for (const address of addresses ?? []) {
@@ -36,13 +27,6 @@ function main(): void {
   // Modest body limit: the only POST bodies we accept are two-field debug commands.
   app.use(express.json({ limit: '16kb' }));
 
-  /**
-   * Permissive CORS, for development only.
-   *
-   * React Native's fetch is not subject to CORS, so the app does not need this. It is here
-   * so a reviewer can hit the endpoints from a browser tab or a debug page while poking
-   * at the feed, which is genuinely useful during a demo.
-   */
   app.use((_req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

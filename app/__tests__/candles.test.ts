@@ -10,14 +10,6 @@ import { parseSymbolFromUrl } from '../src/util/deeplink';
 import { parseServerFrame } from '../src/protocol/types';
 import type { Candle, Interval } from '../src/protocol/types';
 
-/**
- * Candle window behaviour, plus the frame validator and deep link parser.
- *
- * Covers three assignment requirements that are easy to claim and hard to demonstrate:
- * "duplicate candles", "empty history", and "requests that finish after the selected interval
- * has changed".
- */
-
 let nextId = 1;
 function candle(openTime: number, interval: Interval = '1s', overrides: Partial<Candle> = {}): Candle {
   return {
@@ -72,11 +64,6 @@ describe('history loading', () => {
 });
 
 describe('the interval-change race', () => {
-  /**
-   * The assignment requires handling "requests that finish after the selected interval has
-   * changed". The network layer discards superseded requests, and this is the second,
-   * independent guard: even if a stale response reached the store, it cannot be applied.
-   */
   it('rejects history for an interval that is no longer displayed', () => {
     let window = createCandleWindow('1s');
 

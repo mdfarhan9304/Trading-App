@@ -5,17 +5,6 @@ import type { SymbolInfo } from '../protocol/types';
 import { formatPrice, formatQtyCompact } from '../util/format';
 import { theme } from './theme';
 
-/**
- * Top 10 bids and asks from the locally maintained book.
- *
- * Rendered as plain Views rather than a FlatList: the row count is fixed at 20 and every row
- * changes on almost every update, so virtualisation would add bookkeeping without saving any
- * work. FlatList earns its keep on long or partially-visible lists, which this is not.
- *
- * The depth bars are sized from cumulative quantity, which is how a real book is read: the bar
- * shows how much size sits between the touch and that level, not the size at that level alone.
- */
-
 interface Props {
   book: BookState;
   symbolInfo: SymbolInfo;
@@ -26,12 +15,7 @@ interface Props {
 export const OrderBookPanel: React.FC<Props> = ({ book, symbolInfo, rows, stale }) => {
   const { bids, asks } = useMemo(() => topOfBook(book, rows), [book, rows]);
 
-  /**
-   * Cumulative totals, and the largest of them, for bar widths.
-   *
-   * Computed across both sides so the two halves share one scale - otherwise a thin ask side
-   * would show bars as wide as a heavy bid side and misrepresent the imbalance.
-   */
+  // same scale for both sides so a thin book doesn't look full
   const { bidCumulative, askCumulative, maxCumulative } = useMemo(() => {
     const bidTotals: number[] = [];
     let runningBid = 0;
@@ -61,8 +45,6 @@ export const OrderBookPanel: React.FC<Props> = ({ book, symbolInfo, rows, stale 
       <View style={styles.header}>
         <Text style={styles.title}>ORDER BOOK</Text>
         {resyncing ? (
-          // An explicit resyncing state, so a book being rebuilt is never mistaken for a book
-          // that is simply thin. This is what makes the recovery visible in the demo.
           <Text style={styles.resyncing}>RESYNCING</Text>
         ) : (
           <Text style={styles.updateId}>u{book.lastUpdateId}</Text>
@@ -211,8 +193,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 1,
     bottom: 1,
-    // Bars grow from the outer edge inward, so the heaviest levels frame the spread rather
-    // than obscuring the prices at the touch.
+    // grow from the outside in so the prices stay readable
   },
   barBid: {
     left: 0,
@@ -244,9 +225,7 @@ const styles = StyleSheet.create({
   bidPrice: {
     color: theme.color.up,
     textAlign: 'right',
-    // Gutter down the middle of the book. Without it the right-aligned bid price and the
-    // left-aligned ask price meet in the centre and read as one number.
-    paddingRight: theme.space(2),
+    paddingRight: theme.space(2), // keep bid/ask prices from running together
   },
   askPrice: {
     color: theme.color.down,

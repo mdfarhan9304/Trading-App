@@ -82,23 +82,7 @@ export class PriceProcess {
   }
 }
 
-/**
- * Generates the trade stream.
- *
- * WHY POISSON ARRIVALS INSTEAD OF A FIXED TIMER
- * ---------------------------------------------
- * Real trades do not arrive on a metronome, and a fixed cadence would make the
- * coalescing logic look better than it is: with evenly spaced trades, every outgoing
- * chart update would fold in exactly the same number of trades. Poisson arrivals
- * produce clusters and quiet gaps, which is what actually stresses the "several trades
- * collapsed into one update" path.
- *
- * Crucially, each trade's timestamp comes from the arrival process itself, not from
- * whenever the timer happened to fire. So a late or jittery `setInterval` callback
- * changes *when we notice* a trade, never *when the trade occurred*. Candle bucketing
- * therefore stays exact even on a loaded machine, and a replay with the same seed
- * produces byte-identical candles.
- */
+// poisson arrivals — timestamps come from the process, not the timer
 export class TradeGenerator {
   private readonly rng: Rng;
   private readonly meanIntervalMs: number;

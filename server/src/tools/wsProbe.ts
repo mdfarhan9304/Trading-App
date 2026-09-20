@@ -1,19 +1,4 @@
-/**
- * End-to-end WebSocket verification.  Run with:  npm run probe
- * (requires the backend to be running)
- *
- * This is the "prove the feed before writing the app" step. If the app later misbehaves,
- * this script tells us whether to look at the client or the server.
- *
- * It checks:
- *   1. The hello handshake carries the precision scales the client needs.
- *   2. Pong echoes the client's timestamp verbatim, so RTT is computable.
- *   3. The depth `pu` chain is unbroken, i.e. a client can actually stay synchronised.
- *   4. Each forced tier delivers chart updates at roughly its documented rate.
- *   5. Closed candles arrive at every tier, including `minimal`.
- *   6. Malformed frames produce an error reply and do NOT drop the connection.
- *   7. Switching interval takes effect.
- */
+// npm run probe — live protocol check against a running backend
 import WebSocket from 'ws';
 import { TIER_INTERVAL_MS, type Tier } from '../tier/tierMachine';
 import type { ServerMessage } from '../ws/protocol';

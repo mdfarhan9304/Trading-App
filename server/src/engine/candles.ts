@@ -9,32 +9,7 @@ import {
   type Trade,
 } from './types';
 
-/**
- * OHLCV aggregation for one interval.
- *
- * This class is the single source of truth for candle values. Nothing about delivery
- * tiers exists in this file, and that is the whole point: the tier system cannot
- * change a candle because it has no way to reach this code. It only decides how often
- * a *copy* of the active candle is handed to a client.
- *
- * OPEN PRICE SEMANTICS
- * --------------------
- * A candle's `open` is the last traded price at the instant the candle began, i.e.
- * the previous candle's close. It is NOT "the price of the first trade in the
- * interval", which is what a real exchange reports.
- *
- * This is a deliberate choice. It means:
- *   - Every candle always holds valid OHLC values, even before its first trade
- *     arrives, and even if no trade ever arrives. There is no "half-initialised"
- *     candle state for the client to guard against, which removes a whole family of
- *     NaN and empty-chart edge cases.
- *   - The series is visually continuous: candle N's close always equals candle N+1's
- *     open, so the chart never shows a phantom gap during a quiet second.
- *
- * The tradeoff is that on a genuinely quiet interval we emit a flat doji rather than
- * skipping the interval. That is also intentional: a continuous x-axis is far simpler
- * to render correctly than one with holes in it.
- */
+// open = previous close, so quiet intervals still have a valid candle
 export class CandleSeries {
   readonly interval: Interval;
 

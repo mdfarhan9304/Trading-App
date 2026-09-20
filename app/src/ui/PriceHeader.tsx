@@ -4,14 +4,6 @@ import type { SymbolInfo } from '../protocol/types';
 import { formatPercent, formatPriceDelta, formatPriceGrouped, percentChange } from '../util/format';
 import { theme } from './theme';
 
-/**
- * Latest price and its movement.
- *
- * Movement is measured from the first candle in the visible window, so the figure always
- * describes the period actually on screen rather than an arbitrary 24h reference the simulated
- * market does not have.
- */
-
 interface Props {
   symbol: string;
   lastPrice: number | null;
@@ -41,11 +33,8 @@ export const PriceHeader: React.FC<Props> = ({
         <Text
           style={[
             styles.price,
-            // While stale we dim the number rather than hiding it. Hiding would lose useful
-            // context; showing it at full strength would imply it is current.
             { color: stale ? theme.color.textDim : theme.color.text },
           ]}
-          // Prevent the headline from reflowing if a digit is added.
           numberOfLines={1}
           adjustsFontSizeToFit
         >

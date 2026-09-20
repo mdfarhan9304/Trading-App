@@ -4,25 +4,6 @@ import type { SymbolInfo, Trade } from '../protocol/types';
 import { formatPrice, formatQtyCompact, formatTime } from '../util/format';
 import { theme } from './theme';
 
-/**
- * Recent trades, newest first.
- *
- * WHY FlatList HERE BUT NOT FOR THE ORDER BOOK
- * -------------------------------------------
- * This list scrolls and its contents are appended continuously, so virtualisation genuinely
- * helps: only visible rows are mounted. The order book has a fixed 20 rows that all change at
- * once, where virtualisation would be pure overhead.
- *
- * Three things keep it smooth while ~25 trades arrive per second:
- *   - `getItemLayout`, so no row is ever measured. Measurement is the main cost of a list
- *     whose content changes constantly.
- *   - A stable `keyExtractor` on the trade id, so React reuses rows instead of remounting them.
- *   - `React.memo` on the row with a primitive-only prop set, so an unchanged row does not
- *     re-render when the array identity changes.
- *
- * The array itself is bounded in the store, so it cannot grow all session.
- */
-
 const ROW_HEIGHT = 18;
 
 interface Props {
@@ -32,8 +13,7 @@ interface Props {
 }
 
 export const TradesList: React.FC<Props> = ({ trades, symbolInfo, stale }) => {
-  // Newest first for display. The store keeps ascending order because that is the order the
-  // feed guarantees; reversing here keeps the store's invariant simple.
+  // store is oldest-first; flip for the list
   const data = React.useMemo(() => [...trades].reverse(), [trades]);
 
   const renderItem = useCallback(
@@ -82,24 +62,15 @@ export const TradesList: React.FC<Props> = ({ trades, symbolInfo, stale }) => {
           maxToRenderPerBatch={8}
           windowSize={3}
           removeClippedSubviews
-          // The list is short and lives inside a scrolling screen, so it does not scroll itself.
-          scrollEnabled={false}
+          scrollEnabled={false} // parent ScrollView owns the gesture
         />
       )}
     </View>
   );
 };
 
-/** Trade ids are unique and monotonic, which makes them an ideal stable key. */
 const keyExtractor = (trade: Trade): string => String(trade.id);
 
-/**
- * One row.
- *
- * Takes primitives rather than the whole trade object so `React.memo`'s shallow comparison is
- * meaningful: passing the object would compare by reference and re-render every row whenever
- * the parent array changed.
- */
 const TradeRow = React.memo<{
   price: number;
   qty: number;

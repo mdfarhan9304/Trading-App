@@ -1,20 +1,4 @@
-/**
- * Wire types, mirroring the server's `server/src/ws/protocol.ts` and
- * `server/src/engine/types.ts`.
- *
- * These are duplicated rather than imported from a shared package on purpose. A shared
- * workspace package would need npm workspaces, and workspace hoisting is a well known
- * cause of React Native native-module resolution breaking. The wire format is small and
- * documented in docs/PROTOCOL.md, so the cost of duplication is low and the cost of a
- * broken Metro build is high.
- *
- * PRECISION
- * ---------
- * Prices are integer TICKS and quantities integer LOTS, exactly as the server sends them.
- * We never convert to a float. `priceScale` and `qtyScale` arrive in the hello frame and
- * are used only for formatting at the render edge (see src/util/format.ts).
- */
-
+// mirrored from the server. not a shared package — metro + workspaces is a headache
 export type PriceTicks = number;
 export type QtyLots = number;
 export type Millis = number;
@@ -68,16 +52,6 @@ export interface DepthSnapshot {
   asks: BookLevel[];
 }
 
-/**
- * Incremental depth update.
- *
- *   U  - first update id in this event
- *   u  - final update id in this event
- *   pu - final update id of the previous event
- *
- * `pu` is what lets us detect a genuine GAP rather than merely noticing we fell behind.
- * See src/domain/orderBook.ts for the synchronisation rules built on these.
- */
 export interface DepthDelta {
   symbol: string;
   U: number;
@@ -113,10 +87,6 @@ export interface TierState {
   score: number | null;
   lastReportAt: Millis | null;
 }
-
-// ---------------------------------------------------------------------------
-// Server -> client frames
-// ---------------------------------------------------------------------------
 
 export interface HelloFrame {
   type: 'hello';
@@ -170,10 +140,6 @@ export type ServerFrame =
   | TierFrame
   | ErrorFrame;
 
-// ---------------------------------------------------------------------------
-// Client -> server frames
-// ---------------------------------------------------------------------------
-
 export type ClientFrame =
   | { type: 'subscribe'; interval: Interval }
   | { type: 'ping'; seq: number; t: number }
@@ -183,27 +149,11 @@ export type ClientFrame =
   | { type: 'pause' }
   | { type: 'resume' };
 
-// ---------------------------------------------------------------------------
-// Validation
-//
-// WHY HAND-WRITTEN GUARDS ON THE HOT PATH
-// ---------------------------------------
-// `trades`, `depth` and `candle` frames arrive up to 10 times a second. Running a schema
-// validator over every one would burn measurable CPU on a mid-range phone for a shape we
-// control on both ends. These predicates are total (they take `unknown` and never throw),
-// which is what the assignment's "malformed messages" requirement actually needs.
-//
-// A malformed frame is counted and dropped, never allowed to throw inside a socket
-// handler: an uncaught error there would tear down the connection over one bad message.
-// ---------------------------------------------------------------------------
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isNum(value: unknown): value is number {
-  // Number.isFinite rejects NaN and both infinities. A plain `typeof === 'number'` would
-  // let NaN through, and NaN fails every comparison silently rather than loudly.
   return typeof value === 'number' && Number.isFinite(value);
 }
 
@@ -262,13 +212,6 @@ export function isDepthSnapshot(value: unknown): value is DepthSnapshot {
   );
 }
 
-/**
- * Parse a raw socket payload into a validated frame, or return null.
- *
- * Returning null rather than throwing keeps the decision at the call site: the socket
- * layer increments a counter and carries on, which is the only sane response to one bad
- * frame in a live feed.
- */
 export function parseServerFrame(raw: string): ServerFrame | null {
   let parsed: unknown;
   try {
@@ -298,9 +241,7 @@ export function parseServerFrame(raw: string): ServerFrame | null {
     case 'trades': {
       const trades = parsed['trades'];
       if (!Array.isArray(trades)) return null;
-      // Filter rather than reject the whole batch: one malformed trade should not cost us
-      // the other twenty-four in the same frame.
-      return { type: 'trades', trades: trades.filter(isTrade) };
+      return { type: 'trades', trades: trades.filter(isTrade) }; // drop one bad trade, keep the rest
     }
 
     case 'depth':
@@ -325,8 +266,6 @@ export function parseServerFrame(raw: string): ServerFrame | null {
       };
 
     default:
-      // An unknown type is not an error: it may be a frame from a newer server. Ignore it
-      // rather than treating it as corruption.
       return null;
   }
 }

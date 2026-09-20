@@ -2,36 +2,8 @@ import { BOOK_LEVELS, SYMBOL } from '../config';
 import type { Rng } from './rng';
 import type { BookLevel, DepthDelta, DepthSnapshot, PriceTicks, QtyLots, Side } from './types';
 
-/**
- * The authoritative order book for the simulated symbol.
- *
- * WHY AN ABSOLUTE PRICE GRID
- * --------------------------
- * The obvious way to model a book is relative to mid: bid[i] = mid - spread - i*gap.
- * That is wrong for our purposes, because when mid moves a single tick, *every* level
- * moves with it, so every depth delta rewrites all 40 levels. The client's
- * synchronization logic would then never be meaningfully exercised, and the stream
- * would be needlessly fat.
- *
- * Real books do not work that way: resting orders sit at absolute prices and stay
- * there while mid moves through them. So we do the same. Levels live on a fixed price
- * grid (every `GRID_TICKS` ticks). Bids are the grid prices below mid, asks the grid
- * prices above it. When mid rises past a grid price, that price stops being an ask and
- * becomes a bid, and one new ask appears at the far end of the book. A one-tick mid
- * move therefore produces a delta of a couple of levels, not forty.
- *
- * UPDATE IDS
- * ----------
- * Every individual level mutation consumes one id. A published delta covers a *range*
- * of those ids (`U` through `u`) plus the previous delta's final id (`pu`). See the
- * DepthDelta docs in types.ts for why `pu` is what makes gap detection possible.
- *
- * Deltas carry ABSOLUTE quantities, never increments. This makes applying the same
- * delta twice harmless, which is what lets a client safely replay events it buffered
- * while its snapshot request was in flight.
- */
+// absolute price grid — mid moving a tick shouldn't rewrite every level
 export class OrderBook {
-  /** Spacing of the price grid, in ticks. 5 ticks = 0.05 at a tickSize of 0.01. */
   private static readonly GRID_TICKS = 5;
 
   private readonly levels = BOOK_LEVELS;

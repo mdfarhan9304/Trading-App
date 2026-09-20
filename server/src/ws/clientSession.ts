@@ -4,15 +4,9 @@ import { INTERVALS, type Candle, type DepthDelta, type Interval, type Millis, ty
 import { TIER_CONFIG, TierMachine, type Tier } from '../tier/tierMachine';
 import { parseClientMessage, type ServerMessage } from './protocol';
 
-/**
- * The minimum surface a session needs from a socket. Defining it as an interface rather
- * than importing ws.WebSocket lets the tests drive a session with a fake socket that
- * records frames, with no server, no ports, and no async.
- */
 export interface SocketLike {
   send(data: string): void;
   close(): void;
-  /** Bytes queued but not yet written to the OS. Our backpressure signal. */
   readonly bufferedAmount: number;
 }
 
@@ -20,40 +14,11 @@ export interface SessionOptions {
   connId: string;
   engine: MarketEngine;
   socket: SocketLike;
-  /** Injectable for tests. Defaults to Date.now. */
   clock?: () => Millis;
-  /** Starting interval subscription. */
   interval?: Interval;
 }
 
-/**
- * Everything that is per-connection: the delivery tier, the coalescing buffers, the
- * interval subscription, and the timers.
- *
- * THE CENTRAL INVARIANT
- * ---------------------
- * This class may only READ from the engine. It has no method that mutates market data,
- * and the engine hands out copies rather than internal objects. So the worst a slow or
- * hostile client can do is receive fewer frames. It cannot alter a candle, and it cannot
- * affect any other connection, because every connection owns its own instance of this
- * class and its own TierMachine.
- *
- * WHAT THE TIER THROTTLES, AND WHAT IT DOES NOT
- * ---------------------------------------------
- * Throttled (coalesced):
- *   - Active-candle updates. Several trades collapse into one frame carrying the
- *     candle's current state. Because the frame is a full snapshot rather than a delta,
- *     collapsing is lossless: OHLCV is identical to what an unthrottled client sees.
- *   - Trade batches, for the recent-trades list.
- *   - Depth deltas, but MERGED rather than dropped (see flushDepth).
- *
- * Never throttled:
- *   - Candle CLOSE frames. A closed candle is the final, immutable record of an
- *     interval. Delaying it past the next candle's open would let the client's history
- *     disagree with the server's, and dropping it would corrupt the chart permanently.
- *     This bypass is the single most important line in the tier system.
- *   - Pongs, so latency measurement stays accurate at every tier.
- */
+// reads the engine, never writes it. close frames skip the throttle.
 export class ClientSession {
   readonly connId: string;
   readonly tierMachine: TierMachine;
@@ -87,13 +52,6 @@ export class ClientSession {
   private chartUpdatesSent = 0;
   private framesDropped = 0;
 
-  /**
-   * Bytes allowed to sit unwritten before we start dropping frames.
-   *
-   * 256KB is roughly a second of the fastest tier's output. Beyond that the client is
-   * not draining, and queueing more would grow memory without ever catching up, so it is
-   * strictly better to drop.
-   */
   private static readonly BACKPRESSURE_BYTES = 256 * 1_024;
 
   /** How often to check for missing reports. */
@@ -120,9 +78,7 @@ export class ClientSession {
       tier: this.tierMachine.snapshot(),
     });
 
-    // Retain every unsubscribe function. Forgetting even one would leak this session
-    // into the engine's listener set forever after the socket closed, which is the
-    // classic long-lived-emitter memory leak.
+    // keep every unsubscribe so the session doesn't leak on the engine
     this.unsubscribes.push(
       this.engine.events.on('trades', (trades) => this.onTrades(trades)),
       this.engine.events.on('depth', (delta) => this.onDepth(delta)),
@@ -130,8 +86,6 @@ export class ClientSession {
       this.engine.events.on('candleClose', (candle) => this.onCandleClose(candle))
     );
 
-    // Give the client something to draw immediately rather than waiting for the first
-    // flush, which at `minimal` would be a whole second away.
     const active = this.engine.getActiveCandle(this.interval);
     if (active) this.sendCandle(active, false);
 
@@ -139,7 +93,6 @@ export class ClientSession {
     this.silenceTimer = setInterval(() => this.onSilenceCheck(), ClientSession.SILENCE_CHECK_MS);
   }
 
-  /** Tear down every timer and listener. Idempotent. */
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
@@ -286,12 +239,8 @@ export class ClientSession {
   private onCandleClose(candle: Candle): void {
     if (candle.interval !== this.interval) return;
 
-    // THE BYPASS. A closed candle is final and must reach every client at every tier,
-    // so it is sent immediately rather than waiting for the next flush. Note this
-    // deliberately ignores `paused` too: a backgrounded app that stays connected must
-    // not end up with a hole in its history.
+    // closes go out now, even if paused — can't leave a hole in history
     if (this.pendingCandle && this.pendingCandle.openTime === candle.openTime) {
-      // The pending update is superseded by the final version of the same candle.
       this.pendingCandle = null;
     }
     this.sendCandle(candle, true);
@@ -307,18 +256,10 @@ export class ClientSession {
     this.flushTimer = setInterval(() => this.flush(), this.tierMachine.intervalMs);
   }
 
-  /**
-   * Deliver everything accumulated since the last flush. Called on the tier's interval.
-   *
-   * Public so tests can step delivery deterministically instead of waiting on timers.
-   */
   flush(): void {
     if (this.closed || this.paused) return;
 
-    // Backpressure: if the socket has not drained, adding frames only grows memory. We
-    // drop this cycle entirely, including depth. Dropping depth is safe precisely
-    // because the client detects the resulting gap via `pu` and requests a fresh
-    // snapshot; that recovery path is designed for exactly this.
+    // client isn't draining — drop this cycle, they'll resync the book
     if (this.socket.bufferedAmount > ClientSession.BACKPRESSURE_BYTES) {
       this.framesDropped++;
       return;
@@ -337,21 +278,7 @@ export class ClientSession {
     }
   }
 
-  /**
-   * Publish accumulated depth deltas as a single merged delta.
-   *
-   * MERGING RATHER THAN DROPPING
-   * ----------------------------
-   * The client's book synchronisation requires an unbroken chain: each event's `pu` must
-   * equal the previous event's `u`. Dropping a depth event therefore forces a full REST
-   * resnapshot, which at `minimal` tier would happen continuously.
-   *
-   * Merging avoids that entirely, and is sound because deltas carry ABSOLUTE quantities:
-   * applying delta A then delta B is equivalent to applying a single delta whose level
-   * map is B layered over A. We keep the first event's `pu` and the last event's `u`, so
-   * the chain the client validates remains exactly correct across the merge. A slower
-   * tier thus gets fewer, larger depth frames — never a broken book.
-   */
+  // merge depth instead of dropping — keeps the pu chain intact
   private flushDepth(): void {
     if (this.pendingDepth.length === 0) return;
 

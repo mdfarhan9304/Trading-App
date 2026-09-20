@@ -15,24 +15,10 @@ import { ConnectionBadge, IntervalSelector, LatencyBadge, TierBadge } from './St
 import { theme } from './theme';
 import { TradesList } from './TradesList';
 
-/**
- * The single trading screen.
- *
- * EVERY SUBSCRIPTION HERE IS A NARROW SELECTOR
- * --------------------------------------------
- * This is the most important detail in the file. At `full` tier the store receives ~10 candle
- * updates, 5 depth updates and 25 trades per second. Selecting whole store objects would
- * re-render the entire screen on every one of those.
- *
- * Instead each value is selected individually, so a trade arriving re-renders only the trades
- * list, a depth delta only the order book, and a candle only the chart. The store methods
- * cooperate by returning new references for the slice they touched and leaving the rest
- * untouched by reference.
- */
 export const TradingScreen: React.FC = () => {
   const [debugVisible, setDebugVisible] = useState(false);
 
-  // --- market data: one selector per consumer -------------------------------
+  // pick fields, not whole stores — otherwise every tick redraws the screen
   const symbol = useMarketStore((s) => s.symbol);
   const symbolInfo = useMarketStore((s) => s.symbolInfo);
   const interval = useMarketStore((s) => s.interval);
@@ -41,7 +27,6 @@ export const TradingScreen: React.FC = () => {
   const trades = useMarketStore((s) => s.trades);
   const sessionOpen = useMarketStore((s) => s.sessionOpen);
 
-  // --- connection ----------------------------------------------------------
   const status = useConnectionStore((s) => s.status);
   const detail = useConnectionStore((s) => s.detail);
   const lastFrameAt = useConnectionStore((s) => s.lastFrameAt);
@@ -51,7 +36,6 @@ export const TradingScreen: React.FC = () => {
   const connId = useConnectionStore((s) => s.connId);
   const isLive = useConnectionStore(selectIsLive);
 
-  // --- tier ----------------------------------------------------------------
   const serverTier = useTierStore((s) => s.server);
   const measuredHz = useTierStore((s) => s.measuredHz);
   const chartUpdatesSent = useTierStore((s) => s.chartUpdatesSent);
@@ -62,14 +46,6 @@ export const TradingScreen: React.FC = () => {
   const current = activeCandle(candles);
   const spreadTicks = spread(book);
 
-  /**
-   * Everything cached is shown as stale whenever we are not live.
-   *
-   * A single predicate drives dimming across the chart, book and trades, so the three can never
-   * disagree about whether what they show is current - which is exactly the failure the
-   * assignment warns against ("Show cached values as stale while disconnected rather than
-   * presenting them as live").
-   */
   const stale = !isLive;
 
   const handleInterval = useCallback((next: Interval) => {
@@ -86,10 +62,6 @@ export const TradingScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/*
-        RN 0.87 removed StatusBar's `backgroundColor` prop. The bar's background now comes from
-        the Android theme, and SafeAreaView already paints the inset area beneath it.
-      */}
       <RNStatusBar barStyle="light-content" />
 
       <View style={styles.topBar}>
@@ -118,12 +90,6 @@ export const TradingScreen: React.FC = () => {
         </Pressable>
       </View>
 
-      {/*
-        The screen scrolls because on a short device the chart, 20 book rows and the trade list
-        do not all fit. The trades FlatList has scrollEnabled={false} so it cannot fight this
-        ScrollView for the gesture - nested scrollables in the same direction are a classic
-        source of unresponsive lists.
-      */}
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}

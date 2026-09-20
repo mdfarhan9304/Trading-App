@@ -1,12 +1,5 @@
 import type { Millis } from '../engine/types';
 
-/**
- * Delivery tiers.
- *
- * A tier controls only how often chart updates are DELIVERED to one client. It never
- * affects what the candle values are; see engine/marketEngine.ts for why that is
- * structurally guaranteed rather than merely intended.
- */
 export type Tier = 'full' | 'degraded' | 'minimal';
 
 export const TIERS: readonly Tier[] = ['full', 'degraded', 'minimal'];
@@ -15,26 +8,6 @@ export function isTier(value: unknown): value is Tier {
   return value === 'full' || value === 'degraded' || value === 'minimal';
 }
 
-/**
- * Target chart-update interval per tier, in milliseconds.
- *
- * WHY THESE RATES
- * ---------------
- *   full     100ms (10/s) - At 10 updates per second the live candle grows smoothly
- *                           enough that the eye reads it as continuous. Pushing to
- *                           30/s would cost 3x the bandwidth and battery for a
- *                           difference nobody can see on a candlestick chart, whose
- *                           body only changes by a pixel or two per update.
- *   degraded 250ms (4/s)  - Still unambiguously "live" to a human, but roughly 60%
- *                           fewer messages. This is the useful middle ground: a link
- *                           that cannot keep up with 10/s is usually fine at 4/s.
- *   minimal  1000ms (1/s) - The floor. One update per second keeps the chart honest
- *                           and the connection alive on a genuinely bad link, without
- *                           queueing work the client cannot drain.
- *
- * These are CEILINGS on delivery frequency, not a promise to send something. If no
- * trade occurred, nothing is sent; we never invent market activity to hit a rate.
- */
 export const TIER_INTERVAL_MS: Record<Tier, number> = {
   full: 100,
   degraded: 250,
@@ -141,30 +114,7 @@ export interface TierState {
   lastReportAt: Millis | null;
 }
 
-/**
- * Per-connection adaptive delivery state machine.
- *
- * Deliberately pure: it owns no timers, no socket, and never calls Date.now(). Every
- * method that needs the current time is given it. This is what makes the hysteresis
- * behaviour testable by simply passing timestamps, with no fake-timer setup and no
- * sleeping in tests.
- *
- * HYSTERESIS
- * ----------
- * Three independent mechanisms, because each defeats a different failure mode:
- *
- *   1. Asymmetric bands (PROMOTE_FACTOR) - defeats a score parked exactly on a
- *      boundary. Without it, 150ms would flip the decision every report.
- *   2. Confirmation count (CONFIRM_REPORTS) - defeats brief spikes. One bad sample
- *      caused by a GC pause or a single retransmit is ignored.
- *   3. Dwell time (DWELL_MS) - defeats rapid oscillation across a wide range, where
- *      conditions genuinely alternate faster than a tier change is useful.
- *
- * Demotion may skip a step (good link straight to `minimal` if the score is terrible),
- * but promotion always moves one step at a time. Reacting fast to a network getting
- * worse protects the client; reacting slowly to it getting better costs almost nothing
- * and avoids declaring victory early.
- */
+// clock is passed in so tests don't need fake timers
 export class TierMachine {
   private auto: Tier;
   private forced: Tier | null = null;

@@ -22,41 +22,13 @@ import {
   type Trade,
 } from './types';
 
-/**
- * Declared as a type alias rather than an interface on purpose: TypeScript gives
- * object type aliases an implicit index signature, which is what lets them satisfy the
- * `Record<string, unknown>` constraint on Emitter. An interface would not.
- */
 export type EngineEvents = {
-  /** A batch of trades, in ascending id order. Never empty. */
   trades: Trade[];
-  /** An incremental depth update. */
   depth: DepthDelta;
-  /** The active candle for one interval was modified. */
   candleUpdate: Candle;
-  /** A candle closed and is now final. Must reach every client regardless of tier. */
   candleClose: Candle;
 };
 
-/**
- * The authoritative market simulation.
- *
- * ARCHITECTURAL ROLE
- * ------------------
- * This class is the *only* source of truth. It processes every generated trade and
- * maintains correct OHLCV for every interval, and it does so at exactly one rate: as
- * fast as trades occur. It knows nothing whatsoever about delivery tiers, WebSocket
- * connections, or how often anyone is listening.
- *
- * That ignorance is the design. The assignment requires that "the backend must continue
- * processing the complete generated trade stream and computing correct OHLCV candles at
- * every tier". Rather than trying to remember to honour that rule in the delivery code,
- * we make it structurally impossible to break: tier logic lives in ClientSession, which
- * only ever *reads* from this engine. There is no code path by which a slow client can
- * influence a candle, because no such path exists to write.
- *
- * A single engine instance also means N connected clients cost one simulation, not N.
- */
 export class MarketEngine {
   readonly events = new Emitter<EngineEvents>();
   readonly symbol = SYMBOL;
@@ -66,21 +38,12 @@ export class MarketEngine {
   private readonly book: OrderBook;
   private readonly series = new Map<Interval, CandleSeries>();
 
-  /** Recent trades, oldest first, for REST and for a new client's initial payload. */
   private recentTrades: Trade[] = [];
 
   private timer: NodeJS.Timeout | undefined;
   private lastDepthPublish: Millis;
   private running = false;
 
-  /**
-   * Injected by tests so they can drive the simulation with a synthetic clock. In
-   * production this is just Date.now.
-   *
-   * Passing the clock in rather than calling Date.now() directly is what makes the
-   * cross-tier candle test possible: it can replay ten minutes of market in
-   * milliseconds and get bit-identical results.
-   */
   private readonly now: () => Millis;
 
   constructor(options: { seed?: number; startTime?: Millis; clock?: () => Millis } = {}) {
@@ -88,12 +51,7 @@ export class MarketEngine {
     this.now = options.clock ?? (() => Date.now());
     const startTime = options.startTime ?? this.now();
 
-    // One RNG shared by every component. This is deliberate: it means the whole
-    // simulation is a single deterministic stream driven by one seed. Separate RNGs per
-    // component would also be deterministic, but then adding a component that consumes
-    // randomness would silently change every other component's output, making a
-    // recorded demo impossible to reproduce after a refactor.
-    const rng = createRng(seed);
+    const rng = createRng(seed); // one stream so a seed replay stays identical
 
     this.price = new PriceProcess(rng, INITIAL_PRICE_TICKS, startTime);
     this.book = new OrderBook(rng, INITIAL_PRICE_TICKS);

@@ -5,13 +5,6 @@ import type { Interval, Tier, TierState } from '../protocol/types';
 import { formatAge } from '../util/format';
 import { theme } from './theme';
 
-/**
- * Connection status, delivery tier, and interval selection.
- *
- * This row is where the assignment's "expose the active tier and effective update rate" and
- * "show cached values as stale while disconnected" requirements are actually satisfied.
- */
-
 interface StatusProps {
   status: ConnectionStatus;
   detail: string | null;
@@ -19,21 +12,13 @@ interface StatusProps {
   reconnectAttempts: number;
 }
 
-/**
- * Live/stale indicator.
- *
- * Two separate facts are shown deliberately: the socket's state, and how long since data last
- * arrived. They can disagree - a socket can report itself open while nothing flows - and the
- * age is the one that tells you whether what is on screen means anything.
- */
 export const ConnectionBadge: React.FC<StatusProps> = ({
   status,
   detail,
   lastFrameAt,
   reconnectAttempts,
 }) => {
-  // A ticking clock so the age keeps counting up while disconnected. Only runs when NOT live,
-  // so it costs nothing during normal operation - the point at which we least want spare work.
+  // only tick the clock while disconnected
   const [, setTick] = useState(0);
   const isLive = status === 'live';
 
@@ -73,13 +58,6 @@ function describe(status: ConnectionStatus, attempts: number): { label: string; 
   }
 }
 
-/**
- * Delivery tier and rate.
- *
- * Shows the server's target rate next to the rate the app actually measured. Displaying both is
- * what makes the tier system verifiable instead of merely asserted: if they disagree, that is
- * visible on screen rather than hidden in a log.
- */
 export const TierBadge: React.FC<{
   tier: TierState | null;
   measuredHz: number;
@@ -90,12 +68,6 @@ export const TierBadge: React.FC<{
   return (
     <Pressable onPress={onPress} style={styles.tierBadge} hitSlop={8}>
       <Text style={[styles.tierName, { color }]}>{tier ? tier.tier.toUpperCase() : 'TIER --'}</Text>
-      {/*
-        Target next to measured. `measuredHz` is a 2-second rolling average, so immediately
-        after a tier change it can briefly read above or below the new target while the window
-        still holds frames delivered at the old rate. Labelling it as an average avoids that
-        looking like a discrepancy.
-      */}
       <Text style={styles.tierRate}>
         {tier ? `${tier.hz}/s target` : '--'}
         {'  '}
@@ -117,7 +89,6 @@ export function tierColor(tier: Tier): string {
   }
 }
 
-/** Interval selector. The available set comes from the server's hello frame. */
 export const IntervalSelector: React.FC<{
   intervals: readonly Interval[];
   active: Interval;
@@ -140,7 +111,6 @@ export const IntervalSelector: React.FC<{
   </View>
 );
 
-/** Latency and jitter, the figures we report to the backend. */
 export const LatencyBadge: React.FC<{
   latencyMs: number | null;
   jitterMs: number | null;

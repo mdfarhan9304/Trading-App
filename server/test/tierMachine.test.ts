@@ -411,9 +411,6 @@ describe('TierMachine: malformed reports', () => {
 
 describe('TierMachine: per-connection independence', () => {
   it('keeps two connections on entirely separate tiers', () => {
-    // The assignment requires the tier be maintained per client connection. Since each
-    // connection owns its own machine instance, this is a property of the design; the
-    // test pins it so a future refactor to shared state fails loudly.
     const good = new TierMachine(0, 'degraded');
     const bad = new TierMachine(0, 'degraded');
 

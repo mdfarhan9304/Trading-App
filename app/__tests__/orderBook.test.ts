@@ -10,20 +10,6 @@ import {
 } from '../src/domain/orderBook';
 import type { DepthDelta, DepthSnapshot } from '../src/protocol/types';
 
-/**
- * Order book snapshot/delta synchronisation and recovery.
- *
- * This is one of the two tests the assignment specifically recommends. It covers the race
- * the requirement names - "Handle updates that arrive while the snapshot request is in
- * flight" - plus gap detection and recovery.
- *
- * The reducer is pure, so every scenario is a sequence of function calls. There is no
- * socket, no fetch, no timer, and no React. That is the entire reason it was written as a
- * reducer: this behaviour is almost impossible to test through a live connection, because
- * you cannot reliably provoke a delta arriving mid-request on demand.
- */
-
-/** Build a delta. Quantities are integer lots, prices integer ticks, as on the wire. */
 function delta(U: number, u: number, pu: number, bids: [number, number][] = [], asks: [number, number][] = []): DepthDelta {
   return {
     symbol: 'BTC-USDT',

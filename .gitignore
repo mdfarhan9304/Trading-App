@@ -24,6 +24,9 @@ coverage/
 # Agent tooling (installed skills), not project source
 .agents/
 
+# Notes 
+notes/
+
 # React Native / Android (populated once the app is scaffolded)
 app/android/app/build/
 app/android/build/

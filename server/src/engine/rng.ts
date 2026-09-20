@@ -1,39 +1,13 @@
-/**
- * Deterministic pseudo-random number generator.
- *
- * WHY NOT Math.random()
- * ---------------------
- * `Math.random()` cannot be seeded in JavaScript, so a run can never be repeated.
- * The assignment requires the feed to be "repeatable enough to demonstrate and test
- * important cases", and our cross-tier candle test depends on replaying the exact
- * same trade stream three times. That is impossible without a seeded generator.
- *
- * WHY mulberry32
- * --------------
- * It is a 32-bit generator that fits in five lines, has no dependencies, passes the
- * randomness tests that matter for simulation, and is fully portable: the same seed
- * yields the same sequence on any machine and any Node version. We are simulating a
- * market, not generating cryptographic keys, so statistical quality at this level is
- * more than sufficient. A heavier library (e.g. Mersenne Twister) would add a
- * dependency for no benefit we can observe.
- */
-
+// seeded rng — Math.random() can't replay a market
 export interface Rng {
-  /** Uniform in [0, 1). */
   next(): number;
-  /** Standard normal (mean 0, stddev 1). */
   normal(): number;
-  /** Exponential with the given mean. Used for Poisson inter-arrival times. */
   exponential(mean: number): number;
-  /** Uniform integer in [min, max] inclusive. */
   int(min: number, max: number): number;
-  /** True with the given probability. */
   chance(probability: number): boolean;
 }
 
 export function createRng(seed: number): Rng {
-  // Mix the seed so that adjacent seeds (1, 2, 3) produce unrelated streams
-  // rather than similar ones.
   let state = (seed ^ 0x9e3779b9) >>> 0;
 
   const next = (): number => {

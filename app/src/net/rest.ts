@@ -10,14 +10,6 @@ import {
 } from '../protocol/types';
 import { isCandle, isTrade } from '../protocol/types';
 
-/**
- * REST access, plus the primitive that solves the "late response" requirement.
- *
- * Every response is validated before use. The server is ours, but a validated boundary means
- * a protocol change during development produces an empty chart with a logged reason rather
- * than a crash inside a render function.
- */
-
 export class RequestFailure extends Error {
   readonly status: number | null;
   constructor(message: string, status: number | null = null) {
@@ -27,39 +19,16 @@ export class RequestFailure extends Error {
   }
 }
 
-/** Outcome of a tracked request. `superseded` is a normal, expected result, not a failure. */
 export type TrackedResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: 'superseded' | 'aborted' | 'failed'; error?: unknown };
 
-/**
- * Runs requests such that only the NEWEST one can ever produce a usable result.
- *
- * THE PROBLEM THIS SOLVES
- * -----------------------
- * The assignment requires handling "requests that finish after the selected interval has
- * changed". Tap 1s then quickly 1m, and two fetches are in flight. HTTP gives no ordering
- * guarantee, so the 1s response can land second and overwrite the 1m data - leaving a chart
- * labelled 1m showing 1s candles, with no error anywhere.
- *
- * WHY NOT JUST AbortController
- * ----------------------------
- * Aborting is necessary but not sufficient. `abort()` is asynchronous with respect to a
- * response already being parsed: a request can complete successfully in the window between
- * the abort call and the rejection being observed. So there are two independent defences:
- * abort the old request to save the bandwidth, AND compare a monotonic token on completion
- * to decide whether the result is still wanted. The token check is the one that guarantees
- * correctness.
- *
- * The domain layer applies a third, different check (does the payload's interval match the
- * one being displayed), so a stale result would have to defeat all three.
- */
+// only the newest request wins. abort + token — abort alone can still finish
 export class LatestRequest<T> {
   private token = 0;
   private controller: AbortController | null = null;
 
   async run(fn: (signal: AbortSignal) => Promise<T>): Promise<TrackedResult<T>> {
-    // Cancel whatever was in flight; its result is already unwanted.
     this.controller?.abort();
 
     const myToken = ++this.token;
@@ -79,33 +48,22 @@ export class LatestRequest<T> {
     }
   }
 
-  /** Abort anything in flight and invalidate its result. Called on unmount. */
   cancel(): void {
     this.token++;
     this.controller?.abort();
     this.controller = null;
   }
 
-  /** Current token, so a caller can correlate its own state with a request generation. */
   get generation(): number {
     return this.token;
   }
 }
 
-/**
- * fetch with a timeout, JSON parsing, and error mapping.
- *
- * A timeout is essential: React Native's fetch has no default one, so a request to a host
- * that silently drops packets (a laptop that went to sleep, wrong IP) hangs forever and the
- * UI waits with it. `AbortSignal` from the caller is combined with our own timer so either
- * can cancel.
- */
 async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
   const url = `${getRestBase()}${path}`;
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), CONFIG.REQUEST_TIMEOUT_MS);
 
-  // Forward an external abort to our controller so one signal governs the fetch.
   const forward = () => timeout.abort();
   signal.addEventListener('abort', forward);
 
@@ -149,20 +107,12 @@ export async function fetchInfo(signal: AbortSignal): Promise<InfoResponse> {
   return body as InfoResponse;
 }
 
-/** Order book snapshot. Validated because it seeds the entire local book. */
 export async function fetchDepth(limit: number, signal: AbortSignal): Promise<DepthSnapshot> {
   const body = await getJson<unknown>(`/depth?limit=${limit}`, signal);
   if (!isDepthSnapshot(body)) throw new RequestFailure('malformed depth snapshot');
   return body;
 }
 
-/**
- * Candle history.
- *
- * Returns the requested interval alongside the candles so the caller can verify what it
- * received rather than assuming it matches what it asked for. Empty history is a valid
- * result, not an error: the caller renders an empty state.
- */
 export async function fetchKlines(
   interval: Interval,
   limit: number,
@@ -178,8 +128,6 @@ export async function fetchKlines(
   const raw = record['candles'];
   if (!Array.isArray(raw)) throw new RequestFailure('klines response has no candles array');
 
-  // Filter rather than reject: one bad candle should not discard the other 199. A count
-  // mismatch is worth surfacing in the debug panel, which is why the caller gets both.
   const candles = raw.filter(isCandle);
 
   return { interval: responseInterval, candles };
@@ -193,7 +141,6 @@ export async function fetchTrades(limit: number, signal: AbortSignal): Promise<T
   return raw.filter(isTrade);
 }
 
-/** Force a tier from the app's debug panel, via REST rather than the socket. */
 export async function postDebugTier(
   connId: string | undefined,
   tier: 'full' | 'degraded' | 'minimal' | 'auto',

@@ -6,25 +6,7 @@ import { isInterval } from '../engine/types';
 import type { Tier } from '../tier/tierMachine';
 import { ClientSession } from './clientSession';
 
-/**
- * Owns the WebSocket server and the set of live sessions.
- *
- * TWO KINDS OF PING, AND WHY BOTH EXIST
- * -------------------------------------
- * This file uses the WebSocket protocol's own ping/pong control frames, while
- * ClientSession handles an application-level `ping`/`pong` JSON message. They look
- * redundant but solve different problems:
- *
- *   - Protocol ping (here): detects a HALF-OPEN socket. If a device loses power or a NAT
- *     silently drops the flow, TCP may never deliver a FIN, so the server would hold the
- *     connection and its session open indefinitely. An unanswered protocol ping is the
- *     only reliable way to notice. This runs on a fixed schedule regardless of tier.
- *
- *   - Application ping (ClientSession): measures round-trip time for the tier decision.
- *     It has to be application-level because the client needs to timestamp it with its
- *     own clock and correlate the reply; the browser and React Native WebSocket APIs do
- *     not expose protocol-level pong timing at all.
- */
+// protocol ping = half-open sockets. app ping = rtt for tiers
 export class WsHub {
   private readonly engine: MarketEngine;
   private readonly sessions = new Map<string, ClientSession>();

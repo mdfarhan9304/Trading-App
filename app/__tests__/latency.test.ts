@@ -5,16 +5,6 @@ import {
   median,
 } from '../src/net/latency';
 
-/**
- * Latency and jitter measurement.
- *
- * The assignment requires the app to "periodically measure round-trip time over its WebSocket
- * connection and report both latency and jitter to the backend" and to document how they are
- * calculated. These tests are that documentation in executable form: each formula is checked
- * against a hand-computed example, so the README's description cannot silently drift from the
- * code.
- */
-
 describe('median', () => {
   it('returns the middle value for an odd-length window', () => {
     expect(median([30, 10, 20])).toBe(20);
