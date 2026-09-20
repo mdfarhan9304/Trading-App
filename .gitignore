@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log
+
+# Environment
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# Test output
+coverage/
+
+# Agent tooling (installed skills), not project source
+.agents/
+
+# React Native / Android (populated once the app is scaffolded)
+app/android/app/build/
+app/android/build/
+app/android/.gradle/
+app/android/local.properties
+app/ios/Pods/
+app/ios/build/
+*.keystore
+!debug.keystore
