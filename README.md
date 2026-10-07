@@ -1,4 +1,4 @@
-# TwoSpoon — Real-Time Cryptocurrency Trading App
+# Real-Time Cryptocurrency Trading App (Simulated BTC-USDT Market)
 
 A simulated BTC-USDT market with a Node backend and a React Native Android app. The point of
 the project is the bit in the middle: **every client sees the same correct market data, but each
@@ -6,6 +6,12 @@ receives it at a speed matched to its own connection.**
 
 Correctness is global. Delivery speed is per-client. Every design decision below follows from
 keeping those two things apart.
+
+## Demo recording
+
+Screen recording of the running app (chart, order book, connection tiers, and debug controls):
+
+[Recording.webm on Google Drive](https://drive.google.com/file/d/1FbV6VjC_VWABEcSN2XmtRC-NBigXcPpc/view?usp=sharing)
 
 ---
 
@@ -530,6 +536,8 @@ which no test would have caught.
 ---
 
 ## Verified behaviour
+
+See the [demo recording](https://drive.google.com/file/d/1FbV6VjC_VWABEcSN2XmtRC-NBigXcPpc/view?usp=sharing) for a walkthrough.
 
 Running on an Android emulator (API 37, arm64), the app loaded 217 candles of history, synchronized
 the order book from snapshot plus deltas, measured rtt 36ms / jitter 42ms, reported them, and the
